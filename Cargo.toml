@@ -1,6 +1,6 @@
 [package]
 name = "shtstain"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Tray app that tracks project folder sizes and dependency bloat (node_modules, venvs, target...)"
 license = "MIT"
