@@ -1,5 +1,10 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/icon-dark.png">
+  <img src="assets/icon-light.png" alt="sh*tstain icon" width="120">
+</picture>
+
 # sh*tstain
 
 **See how much disk space your projects (and their dependency junk) are really eating.**
@@ -17,9 +22,9 @@
 
 ## What it does
 
-- 📁 **Watch project folders**: add single projects, or tick *"Folder contains projects"* to add every subfolder of a parent folder as its own project.
+- 📁 **Watch project folders**: *Add Project* for a single folder, or *Add Multiple from folder* (the dropdown arrow) to add every subfolder of a parent folder as its own project.
 - 📦 **Separates source from dependencies**: `node_modules`, Python virtualenvs (`.venv`, `venv`, anything with `pyvenv.cfg`), `__pycache__`, Rust `target`, `vendor`, `.next`, `.gradle`, `Pods` and more.
-- 📊 **Table view**: per-project source, dependency and total size; expand a project to see each dependency folder.
+- 📊 **Table view**: per-project source, dependency and total size; search, filter and click-to-sort columns; expand a project to see each dependency folder.
 - 🧹 **One-click cleanup**: delete a project's dependencies (or a single dependency folder) after a confirmation. They can be reinstalled later.
 - 🔄 **Auto rescan** every N seconds (default 60).
 - 🔔 **System tray**: left-click to open, right-click for the current occupied size, *Open* and *Exit*. Closing the window hides it to the tray.
