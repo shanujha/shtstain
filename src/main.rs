@@ -210,6 +210,16 @@ fn set_autostart(on: bool) {
 
 const RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 
+fn paint_tri(ui: &egui::Ui, c: egui::Pos2, up: bool, color: egui::Color32) {
+    let s = if up { -1.0 } else { 1.0 };
+    let pts = vec![
+        egui::pos2(c.x - 4.0, c.y - 2.5 * s),
+        egui::pos2(c.x + 4.0, c.y - 2.5 * s),
+        egui::pos2(c.x, c.y + 2.5 * s),
+    ];
+    ui.painter().add(egui::Shape::convex_polygon(pts, color, egui::Stroke::NONE));
+}
+
 fn fmt(b: u64) -> String {
     let units = ["B", "KB", "MB", "GB", "TB"];
     let mut v = b as f64;
@@ -370,35 +380,38 @@ impl App {
         let deps = DEPS.load(Ordering::Relaxed);
 
         let mut add: Vec<PathBuf> = vec![];
-        ui.horizontal(|ui| {
-            if scanning {
-                ui.spinner();
-                ui.weak("scanning...");
-            } else if let Some(l) = last {
-                ui.weak(format!("scanned {}s ago", l.elapsed().as_secs()));
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let arrow = ui.button("v");
-                egui::Popup::menu(&arrow).show(|ui| {
-                    if ui.button("Add Multiple from folder").clicked() {
-                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                            add.extend(
-                                std::fs::read_dir(&p)
-                                    .into_iter()
-                                    .flatten()
-                                    .flatten()
-                                    .filter(|c| c.file_type().is_ok_and(|t| t.is_dir()) && !c.file_name().to_string_lossy().starts_with('.'))
-                                    .map(|c| c.path()),
-                            );
+        let row_w = ui.available_width();
+        ui.allocate_ui_with_layout(egui::vec2(row_w, 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            {
+                ui.scope(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    {
+                        let r = 6u8;
+                        let arrow = ui.add(egui::Button::new("").min_size(egui::vec2(24.0, 0.0)).corner_radius(egui::CornerRadius { nw: 0, sw: 0, ne: r, se: r }));
+                        paint_tri(ui, arrow.rect.center(), false, ui.visuals().text_color());
+                        egui::Popup::menu(&arrow).show(|ui| {
+                            if ui.button("Add Multiple from folder").clicked() {
+                                if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                                    add.extend(
+                                        std::fs::read_dir(&p)
+                                            .into_iter()
+                                            .flatten()
+                                            .flatten()
+                                            .filter(|c| c.file_type().is_ok_and(|t| t.is_dir()) && !c.file_name().to_string_lossy().starts_with('.'))
+                                            .map(|c| c.path()),
+                                    );
+                                }
+                                ui.close();
+                            }
+                        });
+                        let main = ui.add(egui::Button::new("Add Project").corner_radius(egui::CornerRadius { nw: r, sw: r, ne: 0, se: 0 }));
+                        if main.clicked() {
+                            if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                                add.push(p);
+                            }
                         }
-                        ui.close();
                     }
                 });
-                if ui.button("Add Project").clicked() {
-                    if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                        add.push(p);
-                    }
-                }
                 ui.menu_button("Settings", |ui| {
                     ui.horizontal(|ui| {
                         ui.label("Rescan every");
@@ -417,7 +430,13 @@ impl App {
                         set_autostart(self.autostart);
                     }
                 });
-            });
+                egui::ComboBox::from_id_salt("filter").width(120.0).selected_text(FILTERS[self.filter]).show_ui(ui, |ui| {
+                    for (i, f) in FILTERS.iter().enumerate() {
+                        ui.selectable_value(&mut self.filter, i, *f);
+                    }
+                });
+                ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("Search projects...").desired_width(140.0));
+            }
         });
         if !add.is_empty() {
             for p in add {
@@ -428,15 +447,6 @@ impl App {
             }
             self.changed();
         }
-
-        ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("Search projects...").desired_width(220.0));
-            egui::ComboBox::from_id_salt("filter").selected_text(FILTERS[self.filter]).show_ui(ui, |ui| {
-                for (i, f) in FILTERS.iter().enumerate() {
-                    ui.selectable_value(&mut self.filter, i, *f);
-                }
-            });
-        });
 
         let q = self.search.to_lowercase();
         let mut projects: Vec<Project> = projects
@@ -454,19 +464,30 @@ impl App {
         });
 
         ui.separator();
-        ui.strong(format!(
-            "Total {}   |   source {}   |   dependencies {}",
-            fmt(total),
-            fmt(total.saturating_sub(deps)),
-            fmt(deps)
-        ));
+        ui.horizontal(|ui| {
+            ui.strong(format!(
+                "Total {}   |   source {}   |   dependencies {}",
+                fmt(total),
+                fmt(total.saturating_sub(deps)),
+                fmt(deps)
+            ));
+            if scanning {
+                ui.spinner();
+            } else if let Some(l) = last {
+                ui.weak(format!("scanned {}s ago", l.elapsed().as_secs()));
+            }
+        });
         ui.separator();
         let mut remove: Option<String> = None;
         egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| {
             egui::Grid::new("projects").striped(true).num_columns(5).spacing([16.0, 6.0]).show(ui, |ui| {
                 for (i, h) in ["Project", "Source", "Dependencies", "Total"].iter().enumerate() {
-                    let mark = if self.sort_col == i { if self.sort_asc { " ^" } else { " v" } } else { "" };
+                    let mark = if self.sort_col == i { "    " } else { "" };
                     let r = ui.add(egui::Label::new(egui::RichText::new(format!("{h}{mark}")).strong()).sense(egui::Sense::click()));
+                    if self.sort_col == i {
+                        let c = r.rect.right_center() - egui::vec2(8.0, 0.0);
+                        paint_tri(ui, c, self.sort_asc, ui.visuals().strong_text_color());
+                    }
                     if r.on_hover_text("Click to sort").clicked() {
                         if self.sort_col == i {
                             self.sort_asc = !self.sort_asc;
@@ -564,7 +585,8 @@ impl App {
 fn main() -> eframe::Result {
     let hidden = std::env::args().any(|a| a == "--tray");
     let opts = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([640.0, 520.0]).with_title("sh*tstain")
+        viewport: egui::ViewportBuilder::default().with_inner_size([640.0, 520.0])
+            .with_min_inner_size([560.0, 300.0])
             .with_icon(egui::IconData { rgba: icon::rgba(64, icon::system_light("AppsUseLightTheme")), width: 64, height: 64 }).with_visible(!hidden),
         ..Default::default()
     };
